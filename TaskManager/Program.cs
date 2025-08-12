@@ -6,7 +6,17 @@ using TaskManager.Data;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseOracle(builder.Configuration.GetConnectionString("OracleConnection")));  
+    options.UseOracle(builder.Configuration.GetConnectionString("OracleConnection")));
+
+//CORS kullanarak frontende eriþim izni veriyoruz
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowFrontend",
+        policy => policy
+                          .WithOrigins("http://localhost:5173")
+                          .AllowAnyMethod()
+                          .AllowAnyHeader());
+});
 
 // Add services to the container.
 
@@ -24,7 +34,9 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+//app.UseHttpsRedirection();
+
+app.UseCors("AllowFrontend"); // CORS policy uygulamasý
 
 app.UseAuthorization();
 

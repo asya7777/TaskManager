@@ -5,7 +5,7 @@ using TaskManager.Data;
 using TaskManager.DTOs;
 using TaskManager.Entities;
 
-namespace TaskManager.Controller
+namespace TaskManager.Controllers
 {
     [ApiController]//tells ASP.NET Core that this class is an API controller(receives http requests and sends http responses)
 
@@ -20,6 +20,17 @@ namespace TaskManager.Controller
             _context = context;//receives my database connection and stores it in the private variable
         }
 
+
+        [HttpGet("get_tasks/{userId}")]
+        public async Task<IActionResult> GetTasks(int userId)
+        {
+            var tasks = await _context.Tasks
+                .Where(t => t.usrId == userId)//filtering tasks by userId
+                .ToListAsync();//runs the query and returns a list of tasks
+
+            return Ok(tasks);
+        }
+
         //now we define the actions that this controller will handle
         [HttpPost]//will handle POST requests
         public async Task<IActionResult> CreateTask([FromBody]CreateTaskDTO dto)
@@ -32,6 +43,36 @@ namespace TaskManager.Controller
                 usrId = dto.usrId
             };
 
+            //now we assign tags
+            if(dto.Tags.Count > 0)//checking if tags are requested
+            {
+                var normalized = dto.Tags
+                    .Select(t => t.Trim())//removing spaces
+                    .Where(t=> !string.IsNullOrWhiteSpace(t))//boşluk olanları tamamen siler
+                    .Distinct(StringComparer.OrdinalIgnoreCase)//case insensitive bir şekilde duplicateları çıkarır
+                    .ToList();//async değil çünkü databasele çalışmıyoruz
+                //yollanan tag isimlerini temizledik
+
+                var existingTags = await _context.Tags
+                    .Where(t => normalized.Contains(t.tagName))//veritabanında var olan tagleri buluyoruz
+                    .ToDictionaryAsync(t=>t.tagName, StringComparer.OrdinalIgnoreCase);
+
+                foreach(var tagName in normalized)
+                {
+                    if(existingTags.TryGetValue(tagName, out var existingTag))
+                    {
+                        newTask.Tags.Add(existingTag); //tag zaten varsa, task'a ekliyoruz
+                    }
+                    else
+                    {
+                        newTask.Tags.Add(new Tag
+                        {
+                            tagName = tagName //yeni tag oluşturuyoruz
+                        });
+                    }
+                }
+            }
+
             _context.Tasks.Add(newTask);
             await _context.SaveChangesAsync(); //ensure the changes are saved to the database before returning a response
 
@@ -39,59 +80,34 @@ namespace TaskManager.Controller
 
         }
 
+        //[HttpPost("add_tags/{taskId}")]
+        //public async Task<IActionResult> AddTags(int taskId, [FromBody] List<string> tags)
+        //{
+        //    var normalized = tags
+        //            .Select(t => t.Trim())
+        //            .Where(t => !string.IsNullOrWhiteSpace(t))
+        //            .Distinct(StringComparer.OrdinalIgnoreCase)
+        //            .ToList();
 
-        [HttpPost("assign_tag")]
-        public async Task<IActionResult> AssignTag([FromBody] AssignTagDTO dto)
-        {
-            var task = await _context.Tasks
-                .Include(t => t.Tags) 
-                .FirstOrDefaultAsync(t => t.taskId == dto.taskId);
+        //    var task = await _context.Tasks
+        //        .Include(t => t.Tags)
+        //        .FirstOrDefaultAsync(t => t.taskId == taskId);
+        //    if (task == null)
+        //    {
+        //        return NotFound("Task not found");
+        //    }
 
-            if(task == null)
-            {
-                return NotFound("Task not found.");
-            }
+        //    var existingTags = await _context.Tags
+        //        .ToDictionaryAsync(t => t.tagName, StringComparer.OrdinalIgnoreCase);
 
-            var tag = await _context.Tags
-                .FirstOrDefaultAsync(t => t.tagName == dto.tagName);//looking through tags 
+        //    foreach (var tagName in normalized)
+        //    {
+        //        if(!existingTags.TryGetValue(tagName, out var existingTag)){
+                    
+        //        }
+        //    }
 
-            if(tag == null)
-            {
-                //yeni tag oluşturabiliriz
-                tag = new Tag
-                {
-                    tagName = dto.tagName
-                };
-                _context.Tags.Add(tag);
-                await _context.SaveChangesAsync();
-            }
 
-            //tag zaten var mı?
-            if(task.Tags.Any(t => t.tagId == tag.tagId))//task'in taglerini dolaşıp arıyor
-            {
-                return Ok("Tag already assigned to this task.");
-            }
-
-            task.Tags.Add(tag); //burada EF core tasktag tablosunu güncelliyor
-            await _context.SaveChangesAsync();
-
-            return Ok("Tag assigned to task successfully!");
-        }
+        //}
     }
 }
-
-
-//[HttpGet("db-check")]
-//public async Task<IActionResult> CheckDatabase()
-//{
-//    try
-//    {
-//        // Try a simple query to see if the DB is connected
-//        int userCount = await _context.Users.CountAsync();
-//        return Ok($"✅ Connected to Oracle! User count: {userCount}");
-//    }
-//    catch (Exception ex)
-//    {
-//        return StatusCode(500, $"❌ Failed to connect: {ex.Message}");
-//    }
-//}

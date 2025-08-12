@@ -3,7 +3,6 @@
     public class User
     {
         public int usrId { get; set; }
-        public string nickname { get; set; }
         public string firstName { get; set; }
         public string lastName { get; set; }
         public string email { get; set; }
